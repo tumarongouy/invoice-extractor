@@ -159,103 +159,102 @@ if uploaded_file and active_key:
         with st.spinner("AI กำลังอ่านข้อมูล..."):
             try:
                 if provider == "Gemini (Google)":
-                    data = extract_with_gemini(uploaded_file, active_key)
+                    extracted_data = extract_with_gemini(uploaded_file, active_key)
                 else:
-                    data = extract_with_openrouter(uploaded_file, active_key)
+                    extracted_data = extract_with_openrouter(uploaded_file, active_key)
                 
-                # แสดงผลสรุป
-                # แสดงผลสรุป
-                st.success(f"สกัดข้อมูลสำเร็จ! พบข้อมูลทั้งหมด {len(data)} ชุด")
-                
-                # Checkbox สำหรับ Debug (ซ่อนไว้เป็นค่าเริ่มต้น)
-                show_debug = st.checkbox("🔍 แสดง JSON ดิบ (สำหรับตรวจสอบ)")
-                if show_debug:
-                    st.json(data)
-                
-                # รวมข้อมูลทั้งหมดเพื่อเข้าตารางเดียว
-                all_rows = []
-                for entry in data:
-                    # AI บางครั้งอาจส่งมาเป็น { "invoices": [...] } หรือ { "invoice": { ... } }
-                    # เราจะพยายามหา list ของ items ไม่ว่าจะอยู่ตรงไหน
-                    invoices = []
-                    if isinstance(entry, dict):
-                        if "items" in entry:
-                            invoices = [entry]
-                        elif "invoices" in entry:
-                            invoices = entry["invoices"]
-                        elif "invoice" in entry:
-                            invoices = [entry["invoice"]]
-                        else:
-                            # ถ้าไม่เจอโครงสร้างที่คุ้นเคย ให้ลองหาว่ามี key ไหนเป็น list ของ dict บ้าง
-                            for val in entry.values():
-                                if isinstance(val, list) and len(val) > 0 and isinstance(val[0], dict):
-                                    invoices = [entry] # สมมติว่า entry คือ invoice object
-                                    break
-                    
-                    if not invoices and isinstance(entry, dict):
-                         invoices = [entry]
-
-                    for invoice in invoices:
-                        inv_no = invoice.get('invoice_no', 'N/A')
-                        date = invoice.get('date', 'N/A')
-                        vendor = invoice.get('vendor', 'N/A')
-                        grand = invoice.get('grand_total', 0)
-                        
-                        items = invoice.get('items', [])
-                        if not items:
-                            # ลองหา key อื่นที่อาจจะเป็นรายการสินค้า
-                            for key in ['items_list', 'products', 'services', 'details']:
-                                if key in invoice:
-                                    items = invoice[key]
-                                    break
-                        
-                        for item in items:
-                            sn_data = item.get('sn', [])
-                        # ถ้าเป็น list ของ S/N ให้แยกเป็นหลายแถว
-                        sns = sn_data if isinstance(sn_data, list) else [sn_data]
-                        
-                        for single_sn in sns:
-                            all_rows.append({
-                                "Invoice No": inv_no,
-                                "Date": date,
-                                "Vendor": vendor,
-                                "Item Code": item.get('item_code', ''),
-                                "Description": item.get('desc', ''),
-                                "S/N": single_sn,
-                                "Qty": item.get('qty', 1) if len(sns) > 1 else item.get('qty', 0), # ถ้าแยกแถว Qty ควรเป็น 1
-                                "Price": item.get('price', 0),
-                                "Total": item.get('total', 0),
-                                "Grand Total": grand
-                            })
-                
-                if not all_rows:
-                    st.warning("⚠️ พบใบแจ้งหนี้แต่ไม่บพรายการสินค้า (Items) กรุณาตรวจสอบ JSON ดิบ")
-                else:
-                    df = pd.DataFrame(all_rows)
-                    st.subheader("Preview & Edit ข้อมูล (รวมจากทุกใบแจ้งหนี้)")
-                    edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True) 
-
-                    # ปุ่มโหลด Excel
-                    output = io.BytesIO()
-                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                        edited_df.to_excel(writer, index=False, sheet_name='All Invoices')
-                    
-                    # ตั้งชื่อไฟล์ตามเลขที่ใบแจ้งหนี้แรกที่พบ
-                    first_invoice_no = data[0].get('invoice_no', 'export') if data else 'export'
-                    # ถ้า invoice_no เป็น N/A หรือว่าง ให้ใช้คำว่า export
-                    if not first_invoice_no or first_invoice_no == 'N/A':
-                         first_invoice_no = 'export'
-                    
-                    file_name_ready = f"{first_invoice_no}.xlsx"
-                    
-                    st.download_button(
-                        label="📥 ดาวน์โหลดไฟล์ Excel (ทุกใบ)",
-                        data=output.getvalue(),
-                        file_name=file_name_ready,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                # เก็บข้อมูลลง session_state เพื่อให้ติ๊กกล่อง debug ได้โดยไม่หาย
+                st.session_state['data'] = extracted_data
+                st.success(f"สกัดข้อมูลสำเร็จ! พบข้อมูลทั้งหมด {len(extracted_data)} ชุด")
                 
             except Exception as e:
                 st.error(f"เกิดข้อผิดพลาด: {str(e)}")
+
+# --- Display Results ---
+if 'data' in st.session_state:
+    data = st.session_state['data']
+    
+    # Checkbox สำหรับ Debug
+    show_debug = st.checkbox("🔍 แสดง JSON ดิบ (สำหรับตรวจสอบ)")
+    if show_debug:
+        st.json(data)
+    
+    # รวมข้อมูลทั้งหมดเพื่อเข้าตารางเดียว
+    all_rows = []
+    for entry in data:
+        # AI บางครั้งอาจส่งมาเป็น { "invoices": [...] } หรือ { "invoice": { ... } }
+        invoices = []
+        if isinstance(entry, dict):
+            if "items" in entry:
+                invoices = [entry]
+            elif "invoices" in entry:
+                invoices = entry["invoices"]
+            elif "invoice" in entry:
+                invoices = [entry["invoice"]]
+            else:
+                for val in entry.values():
+                    if isinstance(val, list) and len(val) > 0 and isinstance(val[0], dict):
+                        invoices = [entry] 
+                        break
+        
+        if not invoices and isinstance(entry, dict):
+             invoices = [entry]
+
+        for invoice in invoices:
+            inv_no = invoice.get('invoice_no', 'N/A')
+            date = invoice.get('date', 'N/A')
+            vendor = invoice.get('vendor', 'N/A')
+            grand = invoice.get('grand_total', 0)
+            
+            items = invoice.get('items', [])
+            if not items:
+                for key in ['items_list', 'products', 'services', 'details']:
+                    if key in invoice:
+                        items = invoice[key]
+                        break
+            
+            for item in items:
+                sn_data = item.get('sn', [])
+                sns = sn_data if isinstance(sn_data, list) else [sn_data]
+                
+                for single_sn in sns:
+                    all_rows.append({
+                        "Invoice No": inv_no,
+                        "Date": date,
+                        "Vendor": vendor,
+                        "Item Code": item.get('item_code', ''),
+                        "Description": item.get('desc', ''),
+                        "S/N": single_sn,
+                        "Qty": item.get('qty', 1) if len(sns) > 1 else item.get('qty', 0),
+                        "Price": item.get('price', 0),
+                        "Total": item.get('total', 0),
+                        "Grand Total": grand
+                    })
+    
+    if not all_rows:
+        st.warning("⚠️ พบใบแจ้งหนี้แต่ไม่บพรายการสินค้า (Items) กรุณาตรวจสอบ JSON ดิบ")
+    else:
+        df = pd.DataFrame(all_rows)
+        st.subheader("Preview & Edit ข้อมูล (รวมจากทุกใบแจ้งหนี้)")
+        edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True) 
+
+        # ปุ่มโหลด Excel
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            edited_df.to_excel(writer, index=False, sheet_name='All Invoices')
+        
+        first_invoice_no = data[0].get('invoice_no', 'export') if data else 'export'
+        if not first_invoice_no or first_invoice_no == 'N/A':
+             first_invoice_no = 'export'
+        
+        file_name_ready = f"{first_invoice_no}.xlsx"
+        
+        st.download_button(
+            label="📥 ดาวน์โหลดไฟล์ Excel (ทุกใบ)",
+            data=output.getvalue(),
+            file_name=file_name_ready,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+                
 elif not active_key:
     st.warning("⚠️ กรุณาตั้งค่า API Key ในแถบด้านซ้ายก่อนเริ่มใช้งาน")
