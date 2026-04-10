@@ -54,7 +54,7 @@ def extract_with_gemini(uploaded_file, key):
     
     prompt = """สกัดข้อมูลจากใบแจ้งหนี้ทุกใบที่พบในไฟล์นี้ และตอบกลับเป็น JSON List ของ Object เท่านั้น:
     [{ "invoice_no": "", "date": "", "vendor": "", "grand_total": 0, 
-      "items": [{"item_code": "", "desc": "", "qty": 0, "price": 0, "total": 0}] }]"""
+      "items": [{"item_code": "", "desc": "", "qty": 0, "price": 0, "total": 0, "sn": ""}] }]"""
     
     response = client.models.generate_content(
         model='gemini-2.0-flash',
@@ -97,7 +97,7 @@ def extract_with_openrouter(uploaded_file, key):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Extract all invoices in the file to a JSON list of objects: [{invoice_no, date, vendor, grand_total, items: [{item_code, desc, qty, price, total}]}]"},
+                        {"type": "text", "text": "Extract all invoices in the file to a JSON list of objects: [{invoice_no, date, vendor, grand_total, items: [{item_code, desc, qty, price, total, sn}]}]"},
                         {"type": "image_url", "image_url": {"url": f"data:{uploaded_file.type};base64,{base64_image}"}}
                     ]
                 }
@@ -151,6 +151,7 @@ if uploaded_file and active_key:
                             "Vendor": vendor,
                             "Item Code": item.get('item_code', ''),
                             "Description": item.get('desc', ''),
+                            "S/N": item.get('sn', ''),
                             "Qty": item.get('qty', 0),
                             "Price": item.get('price', 0),
                             "Total": item.get('total', 0),
@@ -167,10 +168,14 @@ if uploaded_file and active_key:
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     edited_df.to_excel(writer, index=False, sheet_name='All Invoices')
                 
+                # ตั้งชื่อไฟล์ตามเลขที่ใบแจ้งหนี้แรกที่พบ
+                first_invoice_no = data[0].get('invoice_no', 'export') if data else 'export'
+                file_name_ready = f"invoice_{first_invoice_no}.xlsx"
+                
                 st.download_button(
                     label="📥 ดาวน์โหลดไฟล์ Excel (ทุกใบ)",
                     data=output.getvalue(),
-                    file_name="all_invoices_extracted.xlsx",
+                    file_name=file_name_ready,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
                 
