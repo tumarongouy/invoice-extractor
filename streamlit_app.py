@@ -52,34 +52,52 @@ def extract_with_gemini(uploaded_file, key):
     # Read image bytes
     image_bytes = uploaded_file.getvalue()
     
-    prompt = """คุณคือผู้เชี่ยวชาญด้านการสกัดข้อมูลใบแจ้งหนี้ สกัดข้อมูลตามกฎเหล็กดังนี้:
-    1. ต้องสกัดข้อมูลมาทุกบรรทัด (Every single item row) ห้ามข้ามบรรทัดเลขที่ 1 และ 3 หรือบรรทัดใดๆ ทั้งสิ้นแม้ไม่มี S/N
-    2. รูปแบบ JSON List: [{ "invoice_no": "", "date": "", "vendor": "", "grand_total": 0, "items": [{ "item_code": "รหัสสินค้าตัวแรกสุด", "desc": "ชื่อสินค้า", "qty": 0, "price": 0, "total": 0, "sn": ["S/N1", "S/N2"] }] }]
-    3. หากพบ S/N ให้ใส่ใน "sn" เท่านั้น และห้ามเอาไปใส่ปนใน "desc"
-    4. หากไม่มี S/N ให้ใส่ "sn": [] หรือ "" แต่ห้ามลบบรรทัดนั้นทิ้งเด็ดขาด
-    5. สกัดชื่อ Vendor และ Invoice No ให้ถูกต้องจากหัวกระดาษ"""
+    prompt = """คุณคือ AI สกัดข้อมูลใบแจ้งหนี้ระดับสูง (Invoice Specialist) 
+    
+    ### กฎเหล็ก (STRICT RULES):
+    1. **REQUIRED ALL ITEMS**: ต้องสกัดข้อมูลมาให้ "ครบทุกบรรทัด" ในตาราง ห้ามข้ามเด็ดขาด
+    2. **STRIKETHROUGH & MARKS**: หากพบตัวหนังสือที่มีเส้นขีดฆ่า (Strikethrough), เส้นสีแดงทับ หรือรอยปากกา "ให้สกัดข้อความนั้นออกมาเป็นข้อมูลจริง" ห้ามมองว่าเป็นข้อความที่ถูกยกเลิก
+    3. **MISSING S/N**: รายการที่ไม่มี Serial Number (S/N) ให้สกัดออกมาด้วย โดยใส่ค่า sn เป็น array ว่าง `[]`
+    4. **ITEM CODE CLARITY**: รหัสสินค้า (Item Code) ให้สังเกตจาก "ตัวอักษรภาษาอังกฤษตัวพิมพ์ใหญ่ตัวแรกสุด" ของแต่ละบรรทัด ตัวอย่างเช่น "HWMAV...", "SWMAV...", "SVC..." ฯลฯ หากมีข้อความอื่นบังหน้า ให้เริ่มสกัดตั้งแต่ตัวพิมพ์ใหญ่ตัวแรกเป็นต้นไป
+    
+    ### ตัวอย่างการสกัด (EXAMPLES):
+    - กรณีเจอเส้นขีดฆ่า: ภาพมีคำว่า ~~HWMAV123~~ -> สกัดได้ "HWMAV123"
+    - กรณีไม่มี S/N: รายการ MA Service (ไม่มี S/N) -> สกัดรายการตามปกติ, `sn: []`
+    - กรณี Item Code: พบบรรทัด "1. HWMAV500" -> Item Code คือ "HWMAV500"
+
+    ### รูปแบบ JSON ที่ต้องการ (RESPONSE FORMAT):
+    ให้ส่งกลับมาเป็น List ของ Object เท่านั้น:
+    [{
+        "invoice_no": "เลขที่เอกสาร (เช่น IV-2024001)",
+        "date": "วันที่ (เช่น 10/04/2024)",
+        "vendor": "ชื่อบริษัทผู้ขาย",
+        "grand_total": 0,
+        "items": [
+            { 
+                "item_code": "HWMAV500012M", 
+                "desc": "ชื่อสินค้าหรือรายละเอียด", 
+                "qty": 1, 
+                "price": 1000, 
+                "total": 1000, 
+                "sn": ["SN123", "SN456"] 
+            }
+        ]
+    }]"""
     
     response = client.models.generate_content(
         model='gemini-2.0-flash',
         contents=[
             prompt,
             genai.types.Part.from_bytes(data=image_bytes, mime_type=uploaded_file.type)
-        ]
+        ],
+        config=genai.types.GenerateContentConfig(
+            response_mime_type="application/json"
+        )
     )
     
     # Clean JSON output
-    text = response.text
-    # หา [ หรือ { ตัวแรก
-    start_index = min(idx for idx in [text.find('['), text.find('{')] if idx != -1)
-    if start_index == -1:
-        raise Exception("AI did not return valid JSON: " + text)
-    
-    try:
-        data, _ = json.JSONDecoder().raw_decode(text[start_index:])
-        # Ensure it's a list
-        return data if isinstance(data, list) else [data]
-    except Exception as e:
-        raise Exception(f"JSON Parse Error: {str(e)}\nRaw Text: {text}")
+    data = json.loads(response.text)
+    return data if isinstance(data, list) else [data]
 
 def extract_with_openrouter(uploaded_file, key):
     import base64
@@ -100,7 +118,16 @@ def extract_with_openrouter(uploaded_file, key):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Extract EVERY item line from the invoice into a JSON list. Rules: 1. Item Code is the first string (e.g., HWMAV...). 2. Extract ALL items including lines 1 and 3 (with or without S/N). 3. If multiple S/Ns exist for one item, put them in a list. 4. Format: [{invoice_no, date, vendor, grand_total, items: [{item_code, desc, qty, price, total, sn: []}]}]"},
+                        {
+                            "type": "text", 
+                            "text": """EXTRACT ALL ITEMS FROM INVOICE. 
+                            RULES:
+                            1. DO NOT SKIP ANY LINE even if it has red marks, strikethroughs, or no S/N.
+                            2. ITEM CODE is the string starting with the first uppercase English letter in the line (e.g., 'HWMAV...').
+                            3. If no S/N found, set 'sn' to [].
+                            4. Treat strikethroughs or red lines as VALID DATA to be extracted.
+                            Format as JSON: [{invoice_no, date, vendor, grand_total, items: [{item_code, desc, qty, price, total, sn: []}]}]"""
+                        },
                         {"type": "image_url", "image_url": {"url": f"data:{uploaded_file.type};base64,{base64_image}"}}
                     ]
                 }
