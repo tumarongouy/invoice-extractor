@@ -54,7 +54,7 @@ def extract_with_gemini(uploaded_file, key):
     
     prompt = """สกัดข้อมูลจากใบแจ้งหนี้ทุกใบที่พบในไฟล์นี้ และตอบกลับเป็น JSON List ของ Object เท่านั้น:
     [{ "invoice_no": "", "date": "", "vendor": "", "grand_total": 0, 
-      "items": [{"desc": "", "qty": 0, "price": 0, "total": 0}] }]"""
+      "items": [{"item_code": "", "desc": "", "qty": 0, "price": 0, "total": 0}] }]"""
     
     response = client.models.generate_content(
         model='gemini-2.0-flash',
@@ -97,7 +97,7 @@ def extract_with_openrouter(uploaded_file, key):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Extract invoice to JSON: {invoice_no, date, vendor, grand_total, items: [{desc, qty, price, total}]}"},
+                        {"type": "text", "text": "Extract all invoices in the file to a JSON list of objects: [{invoice_no, date, vendor, grand_total, items: [{item_code, desc, qty, price, total}]}]"},
                         {"type": "image_url", "image_url": {"url": f"data:{uploaded_file.type};base64,{base64_image}"}}
                     ]
                 }
@@ -149,6 +149,7 @@ if uploaded_file and active_key:
                             "Invoice No": inv_no,
                             "Date": date,
                             "Vendor": vendor,
+                            "Item Code": item.get('item_code', ''),
                             "Description": item.get('desc', ''),
                             "Qty": item.get('qty', 0),
                             "Price": item.get('price', 0),
