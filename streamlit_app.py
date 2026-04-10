@@ -55,7 +55,9 @@ def extract_with_gemini(uploaded_file, key):
     prompt = """สกัดข้อมูลจากใบแจ้งหนี้ทุกใบที่พบในไฟล์นี้ และตอบกลับเป็น JSON List ของ Object เท่านั้น:
     [{ "invoice_no": "", "date": "", "vendor": "", "grand_total": 0, 
       "items": [{"item_code": "", "desc": "", "qty": 0, "price": 0, "total": 0, "sn": ["S/N1", "S/N2"]}] }]
-    *หมายเหตุ: หากหนึ่งรายการมีหลาย S/N ให้ใส่มาเป็น List ของข้อความ"""
+    *ข้อกำหนดสำคัญ:
+    1. ต้องสกัดข้อมูลมาทุกรายการสินค้า (Extract EVERY item row) ที่ปรากฏในใบแจ้งหนี้ แม้รายการนั้นจะไม่มี S/N ก็ตาม
+    2. หากหนึ่งรายการมีหลาย S/N ให้ใส่มาเป็น List ของข้อความ หากไม่มีให้ใส่เป็นค่าว่าง "" """
     
     response = client.models.generate_content(
         model='gemini-2.0-flash',
@@ -98,7 +100,7 @@ def extract_with_openrouter(uploaded_file, key):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Extract all invoices in the file to a JSON list of objects: [{invoice_no, date, vendor, grand_total, items: [{item_code, desc, qty, price, total, sn: [\"sn1\", \"sn2\"]}]}]"},
+                        {"type": "text", "text": "Extract all invoices in the file to a JSON list (EVERY item row must be included, even without S/N): [{invoice_no, date, vendor, grand_total, items: [{item_code, desc, qty, price, total, sn: [\"sn1\", \"sn2\"]}]}]"},
                         {"type": "image_url", "image_url": {"url": f"data:{uploaded_file.type};base64,{base64_image}"}}
                     ]
                 }
@@ -174,9 +176,9 @@ if uploaded_file and active_key:
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     edited_df.to_excel(writer, index=False, sheet_name='All Invoices')
                 
-                # ตั้งชื่อไฟล์ตามเลขที่ใบแจ้งหนี้แรกที่พบ
+                # ตั้งชื่อไฟล์ตามเลขที่ใบแจ้งหนี้แรกที่พบ (ไม่มีคำว่า invoice_)
                 first_invoice_no = data[0].get('invoice_no', 'export') if data else 'export'
-                file_name_ready = f"invoice_{first_invoice_no}.xlsx"
+                file_name_ready = f"{first_invoice_no}.xlsx"
                 
                 st.download_button(
                     label="📥 ดาวน์โหลดไฟล์ Excel (ทุกใบ)",
