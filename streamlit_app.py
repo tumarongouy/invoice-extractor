@@ -232,14 +232,29 @@ if 'data' in st.session_state:
                         return 0
 
                 for single_sn in sns:
+                    # พยายามดึง S/N จากคำอธิบาย หากช่อง S/N ว่าง
+                    display_sn = str(single_sn).strip()
+                    desc_text = item.get('desc', '')
+                    
+                    if not display_sn or display_sn == "" or display_sn.upper() == "NONE":
+                        # Regex หาคำว่า S/N ตามด้วยตัวเลข/ตัวอักษร
+                        match = re.search(r'S/N\s*[:#-]?\s*([A-Za-z0-9-]+)', desc_text)
+                        if match:
+                            display_sn = match.group(1)
+
+                    qty_val = clean_num(item.get('qty'))
+                    # ถ้าเจอ S/N แต่ Qty เป็น 0 ให้เดาว่าเป็น 1 (รายการเจาะจงเครื่อง)
+                    if display_sn and qty_val == 0:
+                        qty_val = 1
+
                     all_rows.append({
                         "Invoice No": inv_no,
                         "Date": date,
                         "Vendor": vendor,
                         "Item Code": item.get('item_code', ''),
-                        "Description": item.get('desc', ''),
-                        "S/N": single_sn,
-                        "Qty": clean_num(item.get('qty')) if len(sns) <= 1 else 1,
+                        "Description": desc_text,
+                        "S/N": display_sn,
+                        "Qty": qty_val if len(sns) <= 1 else 1,
                         "Price": clean_num(item.get('price')),
                         "Total": clean_num(item.get('total')),
                         "Grand Total": clean_num(grand)
