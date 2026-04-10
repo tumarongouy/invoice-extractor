@@ -55,7 +55,7 @@ def extract_with_gemini(uploaded_file, key):
     prompt = """คุณคือ AI สกัดข้อมูลใบแจ้งหนี้ระดับสูง (Invoice Specialist) 
     
     ### กฎเหล็ก (STRICT RULES):
-    0. **VENDOR/SELLER**: ต้องหาชื่อ "ผู้ขาย" (Vendor/Seller) ให้เจอ มักอยู่บนสุดหรือใกล้โลโก้ หากพบชื่อ "บริษัท ไข่ ไอ.ที. เซอร์วิส จำกัด" หรือ "KAI IT. SERVICES CO., LTD" ให้ระบุเป็นผู้ขายทันที ห้ามใส่ NULL
+    0. **VENDOR/SELLER**: ต้องหาชื่อ "ผู้ขาย" (Vendor/Seller) ให้เจอ มักอยู่บนสุดหรือใกล้โลโก้ (มองหาชื่อ บริษัท ไข่ ไอ.ที. เซอร์วิส จำกัด หรือ KAI IT. SERVICES CO., LTD) **ห้าม** เอาชื่อ บริษัท เอ.ซี.ซี.อินเตอร์เนชั่นแนล จำกัด มาเป็น Vendor (เพราะนั่นคือลูกค้า)
     1. **REQUIRED ALL ITEMS**: ต้องสกัดข้อมูลมาให้ "ครบทุกบรรทัด" ในตาราง ห้ามข้ามเด็ดขาด
     2. **STRIKETHROUGH & MARKS**: หากพบตัวหนังสือที่มีเส้นขีดฆ่า (Strikethrough), เส้นสีแดงทับ หรือรอยปากกา "ให้สกัดข้อความนั้นออกมาเป็นข้อมูลจริง" ห้ามมองว่าเป็นข้อความที่ถูกยกเลิก
     3. **MISSING S/N**: รายการที่ไม่มี Serial Number (S/N) ให้สกัดออกมาด้วย โดยใส่ค่า sn เป็น array ว่าง `[]`
@@ -125,8 +125,9 @@ def extract_with_openrouter(uploaded_file, key):
                             RULES:
                             1. DO NOT SKIP ANY LINE even if it has red marks, strikethroughs, or no S/N.
                             2. ITEM CODE is the string starting with the first uppercase English letter in the line (e.g., 'HWMAV...').
-                            3. If no S/N found, set 'sn' to [].
-                            4. Treat strikethroughs or red lines as VALID DATA to be extracted.
+                            3. VENDOR is 'บริษัท ไข่ ไอ.ที. เซอร์วิส จำกัด'. DO NOT pick 'บริษัท เอ.ซี.ซี.อินเตอร์เนชั่นแนล จำกัด' as vendor (this is the CUSTOMER).
+                            4. If no S/N found, set 'sn' to [].
+                            5. Treat strikethroughs or red lines as VALID DATA to be extracted.
                             Format as JSON: [{invoice_no, date, vendor, grand_total, items: [{item_code, desc, qty, price, total, sn: []}]}]"""
                         },
                         {"type": "image_url", "image_url": {"url": f"data:{uploaded_file.type};base64,{base64_image}"}}
@@ -209,8 +210,9 @@ if 'data' in st.session_state:
             if not date or str(date).upper() == "NULL": date = "N/A"
             
             vendor = invoice.get('vendor')
-            if not vendor or str(vendor).upper() == "NULL": 
-                vendor = "บริษัท ไข่ ไอ.ที. เซอร์วิส จำกัด" # Default ตามที่ลูกค้าแจ้งถ้า AI หาไม่เจอ
+            # ดักกรณี AI หาไม่เจอ หรือ AI สับสนเอาชื่อลูกค้า (เอ.ซี.ซี.) มาใส่
+            if not vendor or str(vendor).upper() == "NULL" or "เอ.ซี.ซี" in str(vendor) or "ACC" in str(vendor).upper():
+                vendor = "บริษัท ไข่ ไอ.ที. เซอร์วิส จำกัด" 
             
             grand = invoice.get('grand_total', 0)
             
