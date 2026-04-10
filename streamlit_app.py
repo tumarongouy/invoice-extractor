@@ -52,12 +52,12 @@ def extract_with_gemini(uploaded_file, key):
     # Read image bytes
     image_bytes = uploaded_file.getvalue()
     
-    prompt = """สกัดข้อมูลจากใบแจ้งหนี้ทุกใบที่พบในไฟล์นี้ และตอบกลับเป็น JSON List ของ Object เท่านั้น:
-    [{ "invoice_no": "", "date": "", "vendor": "", "grand_total": 0, 
-      "items": [{"item_code": "", "desc": "", "qty": 0, "price": 0, "total": 0, "sn": ["S/N1", "S/N2"]}] }]
-    *ข้อกำหนดสำคัญ:
-    1. ต้องสกัดข้อมูลมาทุกรายการสินค้า (Extract EVERY item row) ที่ปรากฏในใบแจ้งหนี้ แม้รายการนั้นจะไม่มี S/N ก็ตาม
-    2. หากหนึ่งรายการมีหลาย S/N ให้ใส่มาเป็น List ของข้อความ หากไม่มีให้ใส่เป็นค่าว่าง "" """
+    prompt = """คุณคือผู้เชี่ยวชาญด้านการสกัดข้อมูลใบแจ้งหนี้ สกัดข้อมูลตามกฎเหล็กดังนี้:
+    1. ต้องสกัดข้อมูลมาทุกบรรทัด (Every single item row) ห้ามข้ามบรรทัดเลขที่ 1 และ 3 หรือบรรทัดใดๆ ทั้งสิ้นแม้ไม่มี S/N
+    2. รูปแบบ JSON List: [{ "invoice_no": "", "date": "", "vendor": "", "grand_total": 0, "items": [{ "item_code": "รหัสสินค้าตัวแรกสุด", "desc": "ชื่อสินค้า", "qty": 0, "price": 0, "total": 0, "sn": ["S/N1", "S/N2"] }] }]
+    3. หากพบ S/N ให้ใส่ใน "sn" เท่านั้น และห้ามเอาไปใส่ปนใน "desc"
+    4. หากไม่มี S/N ให้ใส่ "sn": [] หรือ "" แต่ห้ามลบบรรทัดนั้นทิ้งเด็ดขาด
+    5. สกัดชื่อ Vendor และ Invoice No ให้ถูกต้องจากหัวกระดาษ"""
     
     response = client.models.generate_content(
         model='gemini-2.0-flash',
@@ -100,7 +100,7 @@ def extract_with_openrouter(uploaded_file, key):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Extract all invoices in the file to a JSON list (EVERY item row must be included, even without S/N): [{invoice_no, date, vendor, grand_total, items: [{item_code, desc, qty, price, total, sn: [\"sn1\", \"sn2\"]}]}]"},
+                        {"type": "text", "text": "Extract EVERY item line from the invoice into a JSON list. Rules: 1. Item Code is the first string (e.g., HWMAV...). 2. Extract ALL items including lines 1 and 3 (with or without S/N). 3. If multiple S/Ns exist for one item, put them in a list. 4. Format: [{invoice_no, date, vendor, grand_total, items: [{item_code, desc, qty, price, total, sn: []}]}]"},
                         {"type": "image_url", "image_url": {"url": f"data:{uploaded_file.type};base64,{base64_image}"}}
                     ]
                 }
