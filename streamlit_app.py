@@ -54,7 +54,8 @@ def extract_with_gemini(uploaded_file, key):
     
     prompt = """สกัดข้อมูลจากใบแจ้งหนี้ทุกใบที่พบในไฟล์นี้ และตอบกลับเป็น JSON List ของ Object เท่านั้น:
     [{ "invoice_no": "", "date": "", "vendor": "", "grand_total": 0, 
-      "items": [{"item_code": "", "desc": "", "qty": 0, "price": 0, "total": 0, "sn": ""}] }]"""
+      "items": [{"item_code": "", "desc": "", "qty": 0, "price": 0, "total": 0, "sn": ["S/N1", "S/N2"]}] }]
+    *หมายเหตุ: หากหนึ่งรายการมีหลาย S/N ให้ใส่มาเป็น List ของข้อความ"""
     
     response = client.models.generate_content(
         model='gemini-2.0-flash',
@@ -97,7 +98,7 @@ def extract_with_openrouter(uploaded_file, key):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Extract all invoices in the file to a JSON list of objects: [{invoice_no, date, vendor, grand_total, items: [{item_code, desc, qty, price, total, sn}]}]"},
+                        {"type": "text", "text": "Extract all invoices in the file to a JSON list of objects: [{invoice_no, date, vendor, grand_total, items: [{item_code, desc, qty, price, total, sn: [\"sn1\", \"sn2\"]}]}]"},
                         {"type": "image_url", "image_url": {"url": f"data:{uploaded_file.type};base64,{base64_image}"}}
                     ]
                 }
@@ -145,18 +146,23 @@ if uploaded_file and active_key:
                     grand = invoice.get('grand_total', 0)
                     
                     for item in invoice.get('items', []):
-                        all_rows.append({
-                            "Invoice No": inv_no,
-                            "Date": date,
-                            "Vendor": vendor,
-                            "Item Code": item.get('item_code', ''),
-                            "Description": item.get('desc', ''),
-                            "S/N": item.get('sn', ''),
-                            "Qty": item.get('qty', 0),
-                            "Price": item.get('price', 0),
-                            "Total": item.get('total', 0),
-                            "Grand Total": grand
-                        })
+                        sn_data = item.get('sn', '')
+                        # ถ้าเป็น list ของ S/N ให้แยกเป็นหลายแถว
+                        sns = sn_data if isinstance(sn_data, list) else [sn_data]
+                        
+                        for single_sn in sns:
+                            all_rows.append({
+                                "Invoice No": inv_no,
+                                "Date": date,
+                                "Vendor": vendor,
+                                "Item Code": item.get('item_code', ''),
+                                "Description": item.get('desc', ''),
+                                "S/N": single_sn,
+                                "Qty": item.get('qty', 1) if len(sns) > 1 else item.get('qty', 0), # ถ้าแยกแถว Qty ควรเป็น 1
+                                "Price": item.get('price', 0),
+                                "Total": item.get('total', 0),
+                                "Grand Total": grand
+                            })
                 
                 df = pd.DataFrame(all_rows)
                 
