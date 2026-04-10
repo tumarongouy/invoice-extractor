@@ -215,8 +215,22 @@ if 'data' in st.session_state:
             
             for item in items:
                 sn_data = item.get('sn', [])
-                sns = sn_data if isinstance(sn_data, list) else [sn_data]
                 
+                # ถ้าไม่มี S/N เลย ให้ใส่ [""] เพื่อให้ loop ทำงานอย่างน้อย 1 รอบ
+                if isinstance(sn_data, list):
+                    sns = sn_data if len(sn_data) > 0 else [""]
+                else:
+                    sns = [sn_data] if sn_data else [""]
+                
+                # ฟังก์ชันช่วยจัดการตัวเลขที่รวมเครื่องหมายคอมม่าหรือค่าว่าง
+                def clean_num(val):
+                    if val is None or str(val).upper() == "NULL": return 0
+                    if isinstance(val, (int, float)): return val
+                    try:
+                        return float(str(val).replace(',', ''))
+                    except:
+                        return 0
+
                 for single_sn in sns:
                     all_rows.append({
                         "Invoice No": inv_no,
@@ -225,10 +239,10 @@ if 'data' in st.session_state:
                         "Item Code": item.get('item_code', ''),
                         "Description": item.get('desc', ''),
                         "S/N": single_sn,
-                        "Qty": item.get('qty', 1) if len(sns) > 1 else item.get('qty', 0),
-                        "Price": item.get('price', 0),
-                        "Total": item.get('total', 0),
-                        "Grand Total": grand
+                        "Qty": clean_num(item.get('qty')) if len(sns) <= 1 else 1,
+                        "Price": clean_num(item.get('price')),
+                        "Total": clean_num(item.get('total')),
+                        "Grand Total": clean_num(grand)
                     })
     
     if not all_rows:
