@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-multipart
+google-genai
+requests
+pandas
+openpyxl
+python-dotenv
+streamlit
+Pillow
