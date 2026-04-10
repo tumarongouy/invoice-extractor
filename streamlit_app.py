@@ -55,6 +55,7 @@ def extract_with_gemini(uploaded_file, key):
     prompt = """คุณคือ AI สกัดข้อมูลใบแจ้งหนี้ระดับสูง (Invoice Specialist) 
     
     ### กฎเหล็ก (STRICT RULES):
+    0. **VENDOR/SELLER**: ต้องหาชื่อ "ผู้ขาย" (Vendor/Seller) ให้เจอ มักอยู่บนสุดหรือใกล้โลโก้ หากพบชื่อ "บริษัท ไข่ ไอ.ที. เซอร์วิส จำกัด" หรือ "KAI IT. SERVICES CO., LTD" ให้ระบุเป็นผู้ขายทันที ห้ามใส่ NULL
     1. **REQUIRED ALL ITEMS**: ต้องสกัดข้อมูลมาให้ "ครบทุกบรรทัด" ในตาราง ห้ามข้ามเด็ดขาด
     2. **STRIKETHROUGH & MARKS**: หากพบตัวหนังสือที่มีเส้นขีดฆ่า (Strikethrough), เส้นสีแดงทับ หรือรอยปากกา "ให้สกัดข้อความนั้นออกมาเป็นข้อมูลจริง" ห้ามมองว่าเป็นข้อความที่ถูกยกเลิก
     3. **MISSING S/N**: รายการที่ไม่มี Serial Number (S/N) ให้สกัดออกมาด้วย โดยใส่ค่า sn เป็น array ว่าง `[]`
@@ -201,9 +202,16 @@ if 'data' in st.session_state:
              invoices = [entry]
 
         for invoice in invoices:
-            inv_no = invoice.get('invoice_no', 'N/A')
-            date = invoice.get('date', 'N/A')
-            vendor = invoice.get('vendor', 'N/A')
+            inv_no = invoice.get('invoice_no')
+            if not inv_no or str(inv_no).upper() == "NULL": inv_no = "N/A"
+            
+            date = invoice.get('date')
+            if not date or str(date).upper() == "NULL": date = "N/A"
+            
+            vendor = invoice.get('vendor')
+            if not vendor or str(vendor).upper() == "NULL": 
+                vendor = "บริษัท ไข่ ไอ.ที. เซอร์วิส จำกัด" # Default ตามที่ลูกค้าแจ้งถ้า AI หาไม่เจอ
+            
             grand = invoice.get('grand_total', 0)
             
             items = invoice.get('items', [])
